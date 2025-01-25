@@ -263,11 +263,12 @@
   .hand-container {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 16px; /* Increase gap between blocks */
     padding: 16px;
     background-color: #f0f0f0;
     border-radius: 8px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Add shadow */
+    justify-content: center; /* Center align blocks */
   }
 </style>
 

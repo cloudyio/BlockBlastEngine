@@ -34,8 +34,8 @@
 </script>
 
 <div
-  class="inline-block space-x-2"
-  use:draggable={{ position, axis: 'both', relativeTo: 'parent' }}
+  style="touch-action: none; user-select: none;"
+  use:draggable={{ position, axis: 'both', relativeTo: 'parent', pointerTypes: ['mouse', 'touch'] }}
   on:neodrag:start={handleDragStart}
   on:neodrag={handleDragging}
   on:neodrag:end={handleDragEnd}

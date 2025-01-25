@@ -1,5 +1,5 @@
 <script>
-  import { blocks, colors } from '$lib/blocks';
+  import { blocks, colors, rotateBlock } from '$lib/blocks';
   import Block from './Block.svelte';
   import { draggable } from '@neodrag/svelte';
   import { onMount } from 'svelte';
@@ -17,17 +17,42 @@
   let previewColor = null;
   let usedBlocks = new Set(); // Add this to track used blocks
   let roundCounter = 0; // Add round counter
+  let comboCounter = 0; // Add combo counter
+  let score = 0; // Add score
+  let totalCleared = 0; // Track total cleared rows/columns
+  let gameOver = false; // Track game over state
+  let showGrid = true; // Add state for grid visibility
+  let highScore = 0; // Add high score
 
   // Randomize hand with 3 blocks
   let handBlocks = [];
 
+  let placeSound, clearSound, multiplierSound, lostSound;
+  if (typeof window !== 'undefined') {
+    placeSound = new Audio('/place.mp3'); // Load the place sound
+    clearSound = new Audio('/clear.mp3'); // Load the clear sound
+    multiplierSound = new Audio('/multiplier.mp3'); // Load the multiplier sound
+    lostSound = new Audio('/lost.mp3'); // Load the lost sound
+
+    // Load high score from local storage
+    const storedHighScore = localStorage.getItem('highScore');
+    if (storedHighScore) {
+      highScore = parseInt(storedHighScore, 10);
+    }
+  }
+
   function getRandomBlocks() {
-    const shuffled = blocks.sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, 3).map(block => ({
-      ...block,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      position: { x: 0, y: 0 } // Reset position
-    }));
+    let newHand;
+    do {
+      const shuffled = blocks.sort(() => 0.5 - Math.random());
+      newHand = shuffled.slice(0, 3).map(block => ({
+        ...block,
+        shape: rotateBlock(block.shape, Math.floor(Math.random() * 4)), // Apply random rotation
+        color: colors[Math.floor(Math.random() * colors.length)],
+        position: { x: 0, y: 0 } // Reset position
+      }));
+    } while (!canAnyBlockBePlaced(newHand));
+    return newHand;
   }
 
   function getCellFromCursor() {
@@ -62,6 +87,27 @@
       usedBlocks.add(event.detail.id);
       usedBlocks = usedBlocks;
 
+      // Play the place sound
+      if (placeSound) {
+        placeSound.play();
+      }
+
+      // Increment score for each block placed
+      score += shape.flat().filter(Boolean).length;
+
+      // Check and clear full rows and columns
+      const cleared = checkAndClearFullRowsAndColumns();
+      if (cleared > 0) {
+        totalCleared += cleared;
+        comboCounter = Math.floor(totalCleared / 2); // Update combo counter based on total cleared
+        score += comboCounter * 10; // Increase score with multiplier
+        if (comboCounter > 1 && multiplierSound) {
+          multiplierSound.play(); // Play multiplier sound
+        }
+      } else {
+        comboCounter = 0; // Reset combo counter if no rows/columns cleared
+      }
+
       // Check if all blocks are used
       if (usedBlocks.size === handBlocks.length) {
         handBlocks = getRandomBlocks();
@@ -69,8 +115,19 @@
         roundCounter++; // Increment round counter
       }
 
-      // Check and clear full rows and columns
-      checkAndClearFullRowsAndColumns();
+      // Check if the game should end after a delay to allow for clearing animations
+      setTimeout(() => {
+        if (!canAnyBlockBePlaced()) {
+          gameOver = true;
+          if (score > highScore) {
+            highScore = score; // Update high score
+            localStorage.setItem('highScore', highScore); // Save high score to local storage
+          }
+          if (lostSound) {
+            lostSound.play(); // Play the lost sound
+          }
+        }
+      }, 800); // Match the duration of the clearing animation
     }
     previewShape = null;
   }
@@ -153,6 +210,7 @@
   }
 
   function clearPreview() {
+    if (!previewShape) return; // Add null check for previewShape
     for (let i = 0; i < previewShape.length; i++) {
       for (let j = 0; j < previewShape[i].length; j++) {
         if (previewShape[i][j] && !board[previewPosition.y + i][previewPosition.x + j]?.isPermanent) {
@@ -165,29 +223,57 @@
   }
 
   function checkAndClearFullRowsAndColumns() {
+    let cleared = 0;
     for (let y = 0; y < 8; y++) {
       if (board[y].every(cell => cell && cell.isPermanent)) {
         clearRow(y);
+        cleared++;
       }
     }
 
     for (let x = 0; x < 8; x++) {
       if (board.every(row => row[x] && row[x].isPermanent)) {
         clearColumn(x);
+        cleared++;
       }
     }
+    return cleared;
   }
 
   function clearRow(row) {
     for (let x = 0; x < 8; x++) {
-      board[row][x] = null;
+      if (board[row][x]) {
+        board[row][x].clearing = true;
+        board[row][x].delay = x * 0.1; // Add delay for staggered animation
+      }
     }
+    // Play the clear sound
+    if (clearSound) {
+      clearSound.play();
+    }
+    setTimeout(() => {
+      for (let x = 0; x < 8; x++) {
+        board[row][x] = null;
+      }
+    }, 800); // Match the duration of the animation with delay
   }
 
   function clearColumn(col) {
     for (let y = 0; y < 8; y++) {
-      board[y][col] = null;
+      if (board[y][col]) {
+        board[y][col].clearing = true;
+        board[y][col].delay = y * 0.1; // Add delay for staggered animation
+      }
     }
+    // Play the clear sound
+    if (clearSound) {
+      clearSound.play();
+    }
+    setTimeout(() => {
+      for (let y = 0; y < 8; y++) {
+        board[y][col] = null;
+      }
+    }, 800); // Match the duration of the animation with delay
   }
 
   function handleBlockDrag(event) {
@@ -228,19 +314,81 @@
     }
   }
 
+  function canAnyBlockBePlaced(hand = handBlocks) {
+    return hand.some(block => {
+      for (let y = 0; y < 8; y++) {
+        for (let x = 0; x < 8; x++) {
+          if (canPlaceBlock(block.shape, x, y)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+  }
+
+  function checkGameOver() {
+    if (!canAnyBlockBePlaced()) {
+      gameOver = true;
+      if (score > highScore) {
+        highScore = score; // Update high score
+        localStorage.setItem('highScore', highScore); // Save high score to local storage
+      }
+      if (lostSound) {
+        lostSound.play(); // Play the lost sound
+      }
+    }
+  }
+
+  function resetGame() {
+    board = Array(8).fill().map(() => Array(8).fill(null));
+    handBlocks = getRandomBlocks();
+    usedBlocks.clear();
+    roundCounter = 0;
+    comboCounter = 0;
+    score = 0;
+    totalCleared = 0;
+    gameOver = false;
+    checkGameOver(); // Ensure game over is checked on reset
+  }
+
+  function toggleGrid() {
+    showGrid = !showGrid;
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty('--grid-gap', showGrid ? '2px' : '0px');
+    }
+  }
+
+  function closeGameOverMenu() {
+    gameOver = false;
+  }
+
   onMount(() => {
     shadowBlock = null;
     setInterval(clearEmptyShadow, 1000); // Check every second
     handBlocks = getRandomBlocks();
+    checkGameOver(); // Ensure game over is checked on mount
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty('--grid-gap', showGrid ? '2px' : '0px');
+    }
   });
+
 </script>
 
 <style>
+  body {
+    overflow: hidden; /* Prevent scrolling */
+  }
+  .board-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh; /* Full viewport height */
+  }
   .board {
     display: grid;
     grid-template-columns: repeat(8, 44px);
-    grid-template-rows: repeat(8, 44px);
-    gap: 2px;
+    gap: var(--grid-gap); /* Toggle grid gap */
     border: 2px solid #ccc;
     border-radius: 8px;
     background-color: #f9f9f9;
@@ -270,16 +418,102 @@
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Add shadow */
     justify-content: center; /* Center align blocks */
   }
+  @keyframes clearRowColumn {
+    0% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(0.5);
+      opacity: 0;
+    }
+  }
+  .clearing {
+    animation: clearRowColumn 0.5s ease-in-out;
+    animation-fill-mode: forwards;
+  }
+  .combo-container {
+    height: 24px; /* Fixed height to prevent layout shift */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .game-over-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+  }
+  .overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+  }
+  .restart-button {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 8px 16px;
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    z-index: 1000;
+  }
+  .restart-button:hover {
+    background-color: #45a049;
+  }
+  .high-score {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    padding: 8px 16px;
+    background-color: #ff9800;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    z-index: 1000;
+  }
 </style>
 
-<div class="flex justify-center mt-28" on:mousemove={handleMouseMove} on:touchend={handleTouchEnd}>
+<div class="board-container" on:mousemove={handleMouseMove} on:touchend={handleTouchEnd}>
+  <!-- Add Restart Button -->
+  <button class="restart-button" on:click={resetGame}>
+    Restart
+  </button>
+  
+  <!-- Add High Score Display -->
+  <div class="high-score">
+    High Score: {highScore}
+  </div>
+  
   <div class="flex flex-col items-center">
-    <div bind:this={boardElement} class="board" on:neodrag={onNeodrag}>
+    <div class="mt-4 text-lg font-bold">
+      Score: {score}
+    </div>
+    <div class="combo-container">
+      {#if comboCounter > 1}
+        <div class="text-lg font-bold text-red-500">
+          Combo x{comboCounter}!
+        </div>
+      {/if}
+    </div>
+
+    <div bind:this={boardElement} class="board mt-4" on:neodrag={onNeodrag}>
       {#each board as row, rowIndex}
         {#each row as cell, colIndex}
           <div
-            class="board-cell"
-            style="background-color: {cell ? cell.color : 'transparent'}"
+            class="board-cell {cell && cell.clearing ? 'clearing' : ''}"
+            style="background-color: {cell ? cell.color : 'transparent'}; animation-delay: {cell && cell.clearing ? cell.delay + 's' : '0s'}"
           >
           </div>
         {/each}
@@ -304,3 +538,18 @@
     </div>
   </div>
 </div>
+
+{#if gameOver}
+  <div class="overlay"></div>
+  <div class="game-over-popup">
+    <div class="text-lg font-bold">Game Over</div>
+    <div class="mt-4">High Score: {score}</div>
+    <!-- Modify View Grid Button to close the menu -->
+    <button class="mt-4 p-2 bg-green-500 text-white rounded" on:click={closeGameOverMenu}>
+      View Grid
+    </button>
+    <button class="mt-4 p-2 bg-blue-500 text-white rounded" on:click={resetGame}>
+      Retry
+    </button>
+  </div>
+{/if}

@@ -69,3 +69,11 @@ export const blocks = [
     ]
   }
 ];
+
+export function rotateBlock(block, times = 1) {
+  let rotated = block;
+  for (let i = 0; i < times; i++) {
+    rotated = rotated[0].map((_, index) => rotated.map(row => row[index]).reverse());
+  }
+  return rotated;
+}

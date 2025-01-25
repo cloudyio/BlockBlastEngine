@@ -1,11 +1,11 @@
 <script>
-  import { blocks } from '$lib/blocks';
+  import { blocks, colors } from '$lib/blocks';
   import Block from './Block.svelte';
   import { draggable } from '@neodrag/svelte';
   import { onMount } from 'svelte';
 
-  // 9x9 grid
-  let board = Array(9).fill().map(() => Array(9).fill(null));
+  // 8x8 grid
+  let board = Array(8).fill().map(() => Array(8).fill(null));
 
   let boardElement;
   let cursorPosition = { x: 0, y: 0 };
@@ -15,6 +15,20 @@
   
   let shadowBlock = null;
   let previewColor = null;
+  let usedBlocks = new Set(); // Add this to track used blocks
+  let roundCounter = 0; // Add round counter
+
+  // Randomize hand with 3 blocks
+  let handBlocks = [];
+
+  function getRandomBlocks() {
+    const shuffled = blocks.sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, 3).map(block => ({
+      ...block,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      position: { x: 0, y: 0 } // Reset position
+    }));
+  }
 
   function getCellFromCursor() {
     const boardRect = boardElement.getBoundingClientRect();
@@ -34,8 +48,29 @@
     const boardRect = boardElement.getBoundingClientRect();
     const boardX = Math.floor((x - boardRect.left) / 44);
     const boardY = Math.floor((y - boardRect.top) / 44);
-    if (canPlaceBlock(shape, boardX, boardY)) {
+
+    // Ensure coordinates are within bounds
+    if (boardX < 0 || boardX >= 8 || boardY < 0 || boardY >= 8) {
+      console.warn('Block dropped out of bounds:', boardX, boardY);
+      return;
+    }
+
+    const wasPlaced = canPlaceBlock(shape, boardX, boardY);
+    
+    if (wasPlaced) {
       placeBlock(shape, color, boardX, boardY);
+      usedBlocks.add(event.detail.id);
+      usedBlocks = usedBlocks;
+
+      // Check if all blocks are used
+      if (usedBlocks.size === handBlocks.length) {
+        handBlocks = getRandomBlocks();
+        usedBlocks.clear();
+        roundCounter++; // Increment round counter
+      }
+
+      // Check and clear full rows and columns
+      checkAndClearFullRowsAndColumns();
     }
     previewShape = null;
   }
@@ -70,7 +105,7 @@
     }
     for (let i = 0; i < shape.length; i++) {
       for (let j = 0; j < shape[i].length; j++) {
-        if (shape[i][j] && (x + j >= 9 || x + j < 0 || y + i >= 9 || (board[y + i][x + j] && board[y + i][x + j].isPermanent))) {
+        if (shape[i][j] && (x + j >= 8 || x + j < 0 || y + i >= 8 || (board[y + i][x + j] && board[y + i][x + j].isPermanent))) {
           return false;
         }
       }
@@ -99,7 +134,7 @@
       for (let j = 0; j < shape[i].length; j++) {
         if (shape[i][j]) {
           // Skip if out of bounds
-          if (y + i < 0 || y + i > 8 || x + j < 0 || x + j > 8) continue;
+          if (y + i < 0 || y + i > 7 || x + j < 0 || x + j > 7) continue;
           board[y + i][x + j] = { color: `rgba(${hexToRgb(color)}, 0.2)`, isPermanent: false, isPreview: true };
         }
       }
@@ -122,10 +157,36 @@
       for (let j = 0; j < previewShape[i].length; j++) {
         if (previewShape[i][j] && !board[previewPosition.y + i][previewPosition.x + j]?.isPermanent) {
           // Skip if out of bounds
-          if (previewPosition.y + i < 0 || previewPosition.y + i > 8 || previewPosition.x + j < 0 || previewPosition.x + j > 8) continue;
+          if (previewPosition.y + i < 0 || previewPosition.y + i > 7 || previewPosition.x + j < 0 || previewPosition.x + j > 7) continue;
           board[previewPosition.y + i][previewPosition.x + j] = null;
         }
       }
+    }
+  }
+
+  function checkAndClearFullRowsAndColumns() {
+    for (let y = 0; y < 8; y++) {
+      if (board[y].every(cell => cell && cell.isPermanent)) {
+        clearRow(y);
+      }
+    }
+
+    for (let x = 0; x < 8; x++) {
+      if (board.every(row => row[x] && row[x].isPermanent)) {
+        clearColumn(x);
+      }
+    }
+  }
+
+  function clearRow(row) {
+    for (let x = 0; x < 8; x++) {
+      board[row][x] = null;
+    }
+  }
+
+  function clearColumn(col) {
+    for (let y = 0; y < 8; y++) {
+      board[y][col] = null;
     }
   }
 
@@ -145,33 +206,45 @@
       x: event.detail.clientX || event.detail.x + boardRect.left,
       y: event.detail.clientY || event.detail.y + boardRect.top
     };
-    
+
     // Update preview position based on cursor
     previewPosition = {
       x: Math.floor((cursorPosition.x - boardRect.left) / 44),
       y: Math.floor((cursorPosition.y - boardRect.top) / 44)
     };
 
-    // Hide preview if dragged off the grid bounds
-    if (previewPosition.x < 0 || previewPosition.x >= 9 || previewPosition.y < 0 || previewPosition.y >= 9) {
+    // Ensure preview position is within bounds
+    if (previewPosition.x >= 0 && previewPosition.x < 8 && previewPosition.y >= 0 && previewPosition.y < 8) {
+      const { shape, color } = shadowBlock;
+      placePreview(shape, color, previewPosition.x, previewPosition.y);
+    } else {
+      clearPreview();
+    }
+  }
+
+  function clearEmptyShadow() {
+    if (!shadowBlock) {
       clearPreview();
     }
   }
 
   onMount(() => {
     shadowBlock = null;
+    setInterval(clearEmptyShadow, 1000); // Check every second
+    handBlocks = getRandomBlocks();
   });
 </script>
 
 <style>
   .board {
     display: grid;
-    grid-template-columns: repeat(9, 44px);
-    grid-template-rows: repeat(9, 44px);
+    grid-template-columns: repeat(8, 44px);
+    grid-template-rows: repeat(8, 44px);
     gap: 2px;
     border: 2px solid #ccc;
     border-radius: 8px;
     background-color: #f9f9f9;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Add shadow */
   }
   .board-cell {
     width: 44px;
@@ -186,6 +259,15 @@
   }
   .board-cell:nth-child(even) {
     background-color: #fff;
+  }
+  .hand-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 16px;
+    background-color: #f0f0f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Add shadow */
   }
 </style>
 
@@ -202,10 +284,22 @@
         {/each}
       {/each}
     </div>
-    <div class="flex flex-wrap gap-4 mt-8 items-center justify-center bg-gray-100 p-4 rounded-lg shadow-lg">
-      {#each blocks as block}
-        <Block color={block.color} shape={block.shape} on:blockdrop={handleBlockDrop} on:neodrag={handleBlockDrag} on:blockdrag={handleBlockDragging} on:PreviewBlock={PreviewBlock} />
+    <div class="hand-container mt-8">
+      {#each handBlocks as block}
+        <Block 
+          color={block.color} 
+          shape={block.shape} 
+          id={block.id}
+          used={usedBlocks.has(block.id)}
+          on:blockdrop={handleBlockDrop} 
+          on:neodrag={handleBlockDrag} 
+          on:blockdrag={handleBlockDragging} 
+          on:PreviewBlock={PreviewBlock} 
+        />
       {/each}
+    </div>
+    <div class="mt-4 text-lg font-bold">
+      Round: {roundCounter}
     </div>
   </div>
 </div>

@@ -14,27 +14,46 @@
   });
 
   function handleDragEnd(e) {
-    console.log('Dragging stopped', e);
-    // Only dispatch shape, ignore e.detail
-    dispatch('blockdrop', { shape, color });
+    const rect = e.currentTarget.getBoundingClientRect();
+    dispatch('blockdrop', { shape, color, x: rect.left, y: rect.top });
     position = { x: 0, y: 0 };
   }
 
   function handleDragStart(e) {
     const rect = e.currentTarget.getBoundingClientRect();
-    // Place the center of the block at the mouse cursor
-    position.x = e.detail.startX - rect.left - rect.width / 2;
-    position.y = e.detail.startY - rect.top - rect.height / 2;
+    position.x = e.detail.startX - rect.left;
+    position.y = e.detail.startY - rect.top;
   }
 
   function handleDragging(e) {
-    console.log('Dragging', e);
-    dispatch('PreviewBlock', { shape, color });
+    const rect = e.currentTarget.getBoundingClientRect();
+    dispatch('PreviewBlock', { shape, color, x: rect.left, y: rect.top });
   }
 </script>
 
+<style>
+  .block {
+    touch-action: none;
+    user-select: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .block-row {
+    display: flex;
+    gap: 2px;
+  }
+  .block-cell {
+    width: 36px;
+    height: 36px;
+  }
+  .block-cell.filled {
+    border: 1px solid #333;
+  }
+</style>
+
 <div
-  style="touch-action: none; user-select: none;"
+  class="block"
   use:draggable={{ position, axis: 'both', relativeTo: 'parent', pointerTypes: ['mouse', 'touch'] }}
   on:neodrag:start={handleDragStart}
   on:neodrag={handleDragging}
@@ -42,9 +61,9 @@
   class:is-preview={isPreview}
 >
   {#each shape as row}
-    <div class="flex">
+    <div class="block-row">
       {#each row as cell}
-        <div class={`w-9 h-9 ${cell ? 'border border-gray-900' : ''}`} style="background-color: {cell ? color : 'transparent'};"></div>
+        <div class="block-cell {cell ? 'filled' : ''}" style="background-color: {cell ? (isPreview ? 'rgba(0, 0, 0, 0.2)' : color) : 'transparent'};"></div>
       {/each}
     </div>
   {/each}

@@ -30,32 +30,14 @@
   }
 
   function handleBlockDrop(event) {
-    const { shape, color } = event.detail;
-    console.log('Block dropped with shape:', shape);
-
-    // Clear preview before placing the block
-    if (previewShape != null) {
-      for (let i = 0; i < previewShape.length; i++) {
-        for (let j = 0; j < previewShape[i].length; j++) {
-          if (previewShape[i][j] && !board[previewPosition.y + i][previewPosition.x + j]?.isPermanent) {
-            board[previewPosition.y + i][previewPosition.x + j] = null;
-          }
-        }
-      }
-    }
-
-    // Convert cursor position to board coordinates
+    const { shape, color, x, y } = event.detail;
     const boardRect = boardElement.getBoundingClientRect();
-    const boardX = Math.floor((cursorPosition.x - boardRect.left) / 44);
-    const boardY = Math.floor((cursorPosition.y - boardRect.top) / 44);
-
-    console.log('Board coordinates:', boardX, boardY);
-
+    const boardX = Math.floor((x - boardRect.left) / 44);
+    const boardY = Math.floor((y - boardRect.top) / 44);
     if (canPlaceBlock(shape, boardX, boardY)) {
       placeBlock(shape, color, boardX, boardY);
     }
-
-    previewShape = null; // Clear preview after drop
+    previewShape = null;
   }
 
   function handleTouchEnd() {
@@ -65,36 +47,30 @@
   }
 
   function PreviewBlock(event) {
-    const { shape, color } = event.detail;
+    const { shape, color, x, y } = event.detail;
     previewShape = shape;
     previewColor = color;
 
-    // Convert cursor position to board coordinates
     const boardRect = boardElement.getBoundingClientRect();
-    const boardX = Math.floor((cursorPosition.x - boardRect.left) / 44);
-    const boardY = Math.floor((cursorPosition.y - boardRect.top) / 44);
+    const boardX = Math.floor((x - boardRect.left) / 44);
+    const boardY = Math.floor((y - boardRect.top) / 44);
 
     if (canPlaceBlock(shape, boardX, boardY)) {
       placePreview(shape, color, boardX, boardY);
+    } else {
+      clearPreview();
     }
-    else {
-      //clear preview
-      for (let i = 0; i < previewShape.length; i++) {
-        for (let j = 0; j < previewShape[i].length; j++) {
-          if (previewShape[i][j] && !board[previewPosition.y + i][previewPosition.x + j]?.isPermanent) {
-            board[previewPosition.y + i][previewPosition.x + j] = null;
-          }
-        }
-      }
-    }
-
   }
 
   function canPlaceBlock(shape, x, y) {
-    // Check if the block can be placed at the given coordinates
+    // Prevent NaN errors
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      console.warn('Invalid block coordinates:', x, y);
+      return false;
+    }
     for (let i = 0; i < shape.length; i++) {
       for (let j = 0; j < shape[i].length; j++) {
-        if (shape[i][j] && (x + j >= 9 || y + i >= 9 || board[y + i][x + j])) {
+        if (shape[i][j] && (x + j >= 9 || x + j < 0 || y + i >= 9 || (board[y + i][x + j] && board[y + i][x + j].isPermanent))) {
           return false;
         }
       }
@@ -115,26 +91,42 @@
   function placePreview(shape, color, x, y) {
     // Only clear the previous preview if the position has changed
     if (previewShape != null && (previewPosition.x !== x || previewPosition.y !== y)) {
-      for (let i = 0; i < previewShape.length; i++) {
-        for (let j = 0; j < previewShape[i].length; j++) {
-          if (previewShape[i][j] && !board[previewPosition.y + i][previewPosition.x + j]?.isPermanent) {
-            board[previewPosition.y + i][previewPosition.x + j] = null;
-          }
-        }
-      }
+      clearPreview();
     }
 
     // Place the block on the board temporarily
     for (let i = 0; i < shape.length; i++) {
       for (let j = 0; j < shape[i].length; j++) {
         if (shape[i][j]) {
-          board[y + i][x + j] = { color, isPermanent: false };
+          // Skip if out of bounds
+          if (y + i < 0 || y + i > 8 || x + j < 0 || x + j > 8) continue;
+          board[y + i][x + j] = { color: `rgba(${hexToRgb(color)}, 0.2)`, isPermanent: false, isPreview: true };
         }
       }
     }
 
     // Update preview position
     previewPosition = { x, y };
+  }
+
+  function hexToRgb(hex) {
+    const bigint = parseInt(hex.slice(1), 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `${r}, ${g}, ${b}`;
+  }
+
+  function clearPreview() {
+    for (let i = 0; i < previewShape.length; i++) {
+      for (let j = 0; j < previewShape[i].length; j++) {
+        if (previewShape[i][j] && !board[previewPosition.y + i][previewPosition.x + j]?.isPermanent) {
+          // Skip if out of bounds
+          if (previewPosition.y + i < 0 || previewPosition.y + i > 8 || previewPosition.x + j < 0 || previewPosition.x + j > 8) continue;
+          board[previewPosition.y + i][previewPosition.x + j] = null;
+        }
+      }
+    }
   }
 
   function handleBlockDrag(event) {
@@ -144,10 +136,7 @@
   }
 
   function handleBlockDragging(event) {
-    const { shape, color, position } = event.detail;
-    previewShape = shape;
-    previewColor = color;
-    cursorPosition = position;
+    // No need for cursorPosition updates
   }
 
   function onNeodrag(event) {
@@ -162,6 +151,11 @@
       x: Math.floor((cursorPosition.x - boardRect.left) / 44),
       y: Math.floor((cursorPosition.y - boardRect.top) / 44)
     };
+
+    // Hide preview if dragged off the grid bounds
+    if (previewPosition.x < 0 || previewPosition.x >= 9 || previewPosition.y < 0 || previewPosition.y >= 9) {
+      clearPreview();
+    }
   }
 
   onMount(() => {
@@ -169,28 +163,49 @@
   });
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
+<style>
+  .board {
+    display: grid;
+    grid-template-columns: repeat(9, 44px);
+    grid-template-rows: repeat(9, 44px);
+    gap: 2px;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+  }
+  .board-cell {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #ddd;
+  }
+  .board-cell:nth-child(odd) {
+    background-color: #f0f0f0;
+  }
+  .board-cell:nth-child(even) {
+    background-color: #fff;
+  }
+</style>
+
 <div class="flex justify-center mt-28" on:mousemove={handleMouseMove} on:touchend={handleTouchEnd}>
-  <div class="flex flex-col">
-    <div 
-      bind:this={boardElement} 
-      class="grid grid-cols-9 w-96 h-96 border border-gray-300 rounded-lg relative"
-      on:neodrag={onNeodrag}
-    >
+  <div class="flex flex-col items-center">
+    <div bind:this={boardElement} class="board" on:neodrag={onNeodrag}>
       {#each board as row, rowIndex}
         {#each row as cell, colIndex}
           <div
-            class="w-11 h-11 border zborder-gray-300 flex items-center justify-center { (rowIndex + colIndex) % 2 === 0 ? 'bg-gray-100' : 'bg-white' } {hoveredCell.x === colIndex && hoveredCell.y === rowIndex ? 'bg-gray-300' : ''}"
+            class="board-cell"
             style="background-color: {cell ? cell.color : 'transparent'}"
           >
           </div>
         {/each}
       {/each}
     </div>
-    <div class="flex flex-wrap gap-4 mt-8 items-center justify-center bg-gray-100 p-4 rounded-lg shadow-lg"> 
-        {#each blocks as block}
-          <Block color={block.color} shape={block.shape} on:blockdrop={handleBlockDrop} on:neodrag={handleBlockDrag} on:blockdrag={handleBlockDragging} on:PreviewBlock={PreviewBlock} />
-        {/each}
+    <div class="flex flex-wrap gap-4 mt-8 items-center justify-center bg-gray-100 p-4 rounded-lg shadow-lg">
+      {#each blocks as block}
+        <Block color={block.color} shape={block.shape} on:blockdrop={handleBlockDrop} on:neodrag={handleBlockDrag} on:blockdrag={handleBlockDragging} on:PreviewBlock={PreviewBlock} />
+      {/each}
     </div>
   </div>
 </div>

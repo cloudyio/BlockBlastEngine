@@ -14,6 +14,7 @@
   let hoveredCell = { x: null, y: null };
   
   let shadowBlock = null;
+  let previewColor = null;
 
   function getCellFromCursor() {
     const boardRect = boardElement.getBoundingClientRect();
@@ -57,10 +58,16 @@
     previewShape = null; // Clear preview after drop
   }
 
+  function handleTouchEnd() {
+    if (previewShape && previewColor) {
+      handleBlockDrop({ detail: { shape: previewShape, color: previewColor } });
+    }
+  }
+
   function PreviewBlock(event) {
     const { shape, color } = event.detail;
     previewShape = shape;
-    let previewColor = color;
+    previewColor = color;
 
     // Convert cursor position to board coordinates
     const boardRect = boardElement.getBoundingClientRect();
@@ -163,7 +170,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="flex justify-center mt-28" on:mousemove={handleMouseMove}>
+<div class="flex justify-center mt-28" on:mousemove={handleMouseMove} on:touchend={handleTouchEnd}>
   <div class="flex flex-col">
     <div 
       bind:this={boardElement} 

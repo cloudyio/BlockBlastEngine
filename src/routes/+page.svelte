@@ -128,13 +128,15 @@
       await new Promise(resolve => setTimeout(resolve, 1500)); // Reduce delay to 1.5 seconds
       // New check after DOM updates
       if (!canAnyBlockBePlaced(handBlocks.filter(b => !usedBlocks.has(b.id)))) {
-        gameOver = true;
-        if (score > highScore) {
-          highScore = score;
-          localStorage.setItem('highScore', highScore);
-        }
-        if (lostSound) {
-          lostSound.play();
+        if (!gameOver) { // Ensure game over state is only set once
+          gameOver = true;
+          if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('highScore', highScore);
+          }
+          if (lostSound) {
+            lostSound.play();
+          }
         }
       }
     }

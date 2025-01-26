@@ -1,38 +1,16 @@
-# sv
+# Grid Blast
+Heavily inspired by Block Blast.
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+## How to Play
+You are given a hand of 3 random pieces and an 8x8 grid. Pieces can be placed on the grid as long as they fit and don't overlap any other pieces.
 
-## Creating a project
+- If a row or column is filled, it will be cleared to make space for new blocks and give points.
+- If 2 or more rows/columns are fully filled when 1 block is placed, you will get more points for that move.
+- If rows and columns are filled one after the other, a combo is unlocked to grant more points.
+- If you reach a point where no more blocks can be placed onto the grid, the game ends and your final score is presented.
 
-If you're seeing this, you've probably already done this step. Congrats!
-
-```bash
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```bash
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```bash
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+## Extra Info
+- Game made with SvelteKit.
+- All sound effects came from [zapsplat](https://www.zapsplat.com/).
+- Game idea came from Block Blast.
+- Dragging library used was Neodrag - a lightweight drag and drop library.

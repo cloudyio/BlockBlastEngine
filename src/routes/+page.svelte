@@ -1,8 +1,8 @@
 <script>
-  import { blocks, colors, rotateBlock } from '$lib/blocks';
+  import { blocks, colors } from '$lib/blocks';
   import Block from './Block.svelte';
   import { draggable } from '@neodrag/svelte';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
 
   // 8x8 grid
   let board = Array(8).fill().map(() => Array(8).fill(null));
@@ -23,6 +23,7 @@
   let gameOver = false; // Track game over state
   let showGrid = true; // Add state for grid visibility
   let highScore = 0; // Add high score
+  let showMobileNotifier = false; // Add state for mobile notifier
 
   // Randomize hand with 3 blocks
   let handBlocks = [];
@@ -39,6 +40,12 @@
     if (storedHighScore) {
       highScore = parseInt(storedHighScore, 10);
     }
+
+    // Check if the user is on a mobile device
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      showMobileNotifier = true;
+    }
   }
 
   function getRandomBlocks() {
@@ -47,7 +54,7 @@
       const shuffled = blocks.sort(() => 0.5 - Math.random());
       newHand = shuffled.slice(0, 3).map(block => ({
         ...block,
-        shape: rotateBlock(block.shape, Math.floor(Math.random() * 4)), // Apply random rotation
+        shape: block.shapes[Math.floor(Math.random() * block.shapes.length)], // Randomly select a shape
         color: colors[Math.floor(Math.random() * colors.length)],
         position: { x: 0, y: 0 } // Reset position
       }));
@@ -68,7 +75,8 @@
     hoveredCell = getCellFromCursor();
   }
 
-  function handleBlockDrop(event) {
+  async function handleBlockDrop(event) {
+    if (gameOver) return; // Prevent block drop if game is over
     const { shape, color, x, y } = event.detail;
     const boardRect = boardElement.getBoundingClientRect();
     const boardX = Math.floor((x - boardRect.left) / 44);
@@ -115,21 +123,38 @@
         roundCounter++; // Increment round counter
       }
 
-      // Check if the game should end after a delay to allow for clearing animations
-      setTimeout(() => {
-        if (!canAnyBlockBePlaced()) {
-          gameOver = true;
-          if (score > highScore) {
-            highScore = score; // Update high score
-            localStorage.setItem('highScore', highScore); // Save high score to local storage
-          }
-          if (lostSound) {
-            lostSound.play(); // Play the lost sound
-          }
+      // Print available moves
+      printAvailableMoves();
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Reduce delay to 1.5 seconds
+      // New check after DOM updates
+      if (!canAnyBlockBePlaced(handBlocks.filter(b => !usedBlocks.has(b.id)))) {
+        gameOver = true;
+        if (score > highScore) {
+          highScore = score;
+          localStorage.setItem('highScore', highScore);
         }
-      }, 800); // Match the duration of the clearing animation
+        if (lostSound) {
+          lostSound.play();
+        }
+      }
     }
     previewShape = null;
+  }
+
+  function printAvailableMoves() {
+    const moves = [];
+    handBlocks.forEach(block => {
+      block.shapes.forEach((shape, rotation) => {
+        for (let y = 0; y < 8; y++) {
+          for (let x = 0; x < 8; x++) {
+            if (canPlaceBlock(shape, x, y)) {
+              moves.push({ blockId: block.id, rotation, x, y });
+            }
+          }
+        }
+      });
+    });
+    console.log('Available moves:', moves);
   }
 
   function handleTouchEnd() {
@@ -237,6 +262,13 @@
         cleared++;
       }
     }
+
+    if (cleared > 1) {
+      score += Math.floor(cleared * 1.5 * 10); // Apply 1.5x multiplier to the score for multiple clears
+    } else if (cleared === 1) {
+      score += 10; // Regular score for a single clear
+    }
+
     return cleared;
   }
 
@@ -277,6 +309,7 @@
   }
 
   function handleBlockDrag(event) {
+    if (gameOver) return; // Prevent block drag if game is over
     previewShape = event.detail.shape;
     previewColor = event.detail.color;
     shadowBlock = { ...event.detail, isPreview: true };
@@ -316,28 +349,16 @@
 
   function canAnyBlockBePlaced(hand = handBlocks) {
     return hand.some(block => {
+      const currentShape = block.shape;
       for (let y = 0; y < 8; y++) {
         for (let x = 0; x < 8; x++) {
-          if (canPlaceBlock(block.shape, x, y)) {
+          if (canPlaceBlock(currentShape, x, y)) {
             return true;
           }
         }
       }
       return false;
     });
-  }
-
-  function checkGameOver() {
-    if (!canAnyBlockBePlaced()) {
-      gameOver = true;
-      if (score > highScore) {
-        highScore = score; // Update high score
-        localStorage.setItem('highScore', highScore); // Save high score to local storage
-      }
-      if (lostSound) {
-        lostSound.play(); // Play the lost sound
-      }
-    }
   }
 
   function resetGame() {
@@ -349,7 +370,6 @@
     score = 0;
     totalCleared = 0;
     gameOver = false;
-    checkGameOver(); // Ensure game over is checked on reset
   }
 
   function toggleGrid() {
@@ -363,11 +383,14 @@
     gameOver = false;
   }
 
+  function closeMobileNotifier() {
+    showMobileNotifier = false;
+  }
+
   onMount(() => {
     shadowBlock = null;
     setInterval(clearEmptyShadow, 1000); // Check every second
     handBlocks = getRandomBlocks();
-    checkGameOver(); // Ensure game over is checked on mount
     if (typeof document !== 'undefined') {
       document.documentElement.style.setProperty('--grid-gap', showGrid ? '2px' : '0px');
     }
@@ -483,6 +506,18 @@
     border-radius: 4px;
     z-index: 1000;
   }
+  .mobile-notifier {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    z-index: 1001;
+  }
 </style>
 
 <div class="board-container" on:mousemove={handleMouseMove} on:touchend={handleTouchEnd}>
@@ -530,11 +565,9 @@
           on:neodrag={handleBlockDrag} 
           on:blockdrag={handleBlockDragging} 
           on:PreviewBlock={PreviewBlock} 
+          disabled={gameOver} 
         />
       {/each}
-    </div>
-    <div class="mt-4 text-lg font-bold">
-      Round: {roundCounter}
     </div>
   </div>
 </div>
@@ -550,6 +583,16 @@
     </button>
     <button class="mt-4 p-2 bg-blue-500 text-white rounded" on:click={resetGame}>
       Retry
+    </button>
+  </div>
+{/if}
+
+{#if showMobileNotifier}
+  <div class="mobile-notifier">
+    <div class="text-lg font-bold">Notice</div>
+    <div class="mt-4">For the best experience, please use a desktop device.</div>
+    <button class="mt-4 p-2 bg-blue-500 text-white rounded" on:click={closeMobileNotifier}>
+      OK
     </button>
   </div>
 {/if}

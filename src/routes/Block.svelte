@@ -28,7 +28,6 @@
         position = { ...initialPosition };
       }
     }, 50);
-    
   }
 
   function handleDragStart(e) {

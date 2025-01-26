@@ -407,6 +407,7 @@
     justify-content: center;
     align-items: center;
     height: 100vh; /* Full viewport height */
+    overflow-x: hidden; /* Prevent horizontal overflow */
   }
   .board {
     display: grid;
@@ -576,7 +577,8 @@
   <div class="overlay"></div>
   <div class="game-over-popup">
     <div class="text-lg font-bold">Game Over</div>
-    <div class="mt-4">High Score: {score}</div>
+    <div class="mt-4">Score: {score}</div>
+    <div class="mt-4">High Score: {highScore}</div> 
     <!-- Modify View Grid Button to close the menu -->
     <button class="mt-4 p-2 bg-green-500 text-white rounded" on:click={closeGameOverMenu}>
       View Grid

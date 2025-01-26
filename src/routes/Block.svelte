@@ -74,7 +74,7 @@
 
 <div
   class="block {used ? 'used' : ''}"
-  use:draggable={{ position, axis: 'both', relativeTo: 'parent', pointerTypes: ['mouse', 'touch'] }}
+  use:draggable={{ position, axis: 'both', relativeTo: 'parent', pointerTypes: ['mouse', 'touch'], containment: 'parent' }}
   on:neodrag:start={handleDragStart}
   on:neodrag={handleDragging}
   on:neodrag:end={handleDragEnd}
